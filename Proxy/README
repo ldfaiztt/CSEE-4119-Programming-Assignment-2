@@ -1,0 +1,221 @@
+NEWUDPL
+
+NAME
+    newudpl - Network Emulator With UDP Link
+
+SYNOPSIS
+
+    newudpl [-[v|vv]] [-p [recv_port]:[send_port]]
+      [-i sorce_host[[:|/][port|*]]] [-o dest_host[[:|/]port] ]
+      [-s link_speed] [-d delay] [-e Ethernet_speed] [-q queue_buf_size]
+      [-B bit_error_rate] [-L random_packet_loss_rate] [-O out_of_order_rate]
+
+
+DESCRIPTION
+    This is a tool to create various condition of packet switching behavior 
+    artificially for UDP packets.
+
+    The emulator receives UDP packets on a designated port and then delays 
+    them, drops some randomly, corrupts the content, swaps the order of 
+    sending and emulates a finite-bandwidth link by queuing packets. It should 
+    be useful to examine an efficiency of network protocols or codecs.
+
+
+INSTALLATION
+    Source codes are available from: 
+    http://www.columbia.edu/~at541/src
+
+
+    To build, unpack the tar file, then type:
+
+    ./configure
+    make
+
+    I have only tested on SunOS 5.7, 5.8 system and Linux but it should 
+    compile on other Posix-compliant platforms.
+
+OPTIONS
+    -v 
+    -vv
+      Verbose output
+      With a single -v, 
+      the information of dropping packets by congestion and creating 
+      random packet loss/bit error/out of order will be displayed; 
+      with a second one, receiving and sending packets will also be shown. 
+
+    -p receiving port : sending port
+
+      Specifies the binding ip-port for receiving and sending UDP packets. 
+      Otherwise, default values will be used.
+
+        Available range: 1024 - 65535 or 0x400 - 0xFFFF
+        Default: receiving 41192, sending 41193
+
+    -s emulating link speed
+
+      Specifies a finite-bandwidth. The speed of Transferring UDP packets 
+      will not exceed this speed.  Unit is in kb/s.
+
+        Available range: 1 - 50000(MAX_KBPS)
+        Default: 1000
+
+    -e Ethernet speed
+
+      Specifies a Ethernet speed on the machine. It is used to calculate a 
+      tranmission delay, which makes difference especially when the emulating 
+      link speed is slow.
+
+        Available range: 1 for 10M, 2 for 100M, 3 for Gigabit Ethernet
+        Default: 10M(b/s)
+
+    -d delay
+
+      Specifies delay time.  All the packets will have minimum delay.  The 
+      deley for each packet could be varies, depenging on the link speed.
+      For example, -d2 is 2 (sec) and -d1.345678 is 1.345678 (sec).
+
+        Available range: 0 - 10(MAX_DELAYSEC) 
+        Default: 0
+
+    -q queue-buffer size
+
+      Specifies the size of queueing buffer for receiving packets. If you 
+      large this number, less likly to have packet loss by congestion for the 
+      same link speed.
+
+        Available range: 1 - 16384 or 0x1 - 0x4000(MAX_QBUFSIZE) 
+        Default: 8192
+
+    -i source host [[ : | / ] port | * ]
+
+      Specifies the source host for receiving packets. If the emulater 
+      receives a packet from a different host then the packet will be 
+      rejected. The host name could be either IP number with dotted-decimal 
+      notation (e.g., 128.59.16.8) or the host name (e.g., cs.columbia.edu). 
+      If the port is not sepcified then it will accept only packets from the 
+      the port 41191, default values, with corrsponding source host, but you 
+      could rule out this checking by using '*'.
+
+        Default: host - localhost, port 41191
+        Example,
+            -i dynamo.cs.columbia.edu/32768 
+            -i dynamo.cs.columbia.edu/0x8000 
+          -> accepts packets only from dynamo.cs.columbia.edu/32768 
+            -i diamond.cs.columbia.edu 
+          -> accepts packets only from diamond.cs.columbia.edu/41191
+            -i 128.59.16.7:* 
+          -> accepts packets any port from disco.cs.columbia.edu(128.59.16.7) 
+
+    -o destination host [[ : | / ] port ] 
+
+      Specifies a destination host for outgoing packets. 
+
+        Default: host - localhost, port 41194
+
+    -B bit error rate
+
+      Specifies a rate of genarating bit errors for outgoing packets. 
+      The rate is in 1/100000(BITERRDENOM).
+
+        Available range: 1 - 99999(BITERRDENOM - 1) 
+        Default: 0
+
+    -L random packet loss rate
+
+      Specifies a rate of genarating random packet loss for outgoing packets. 
+      The rate is in percentage.
+
+        Available range: 1 - 99 
+        Default: 0
+
+    -O out of order rate
+
+      Specifies a rate of randomizing oreder of packets.  The distination host 
+      will receive some packets in out of order in certain rate.
+      The rate is in percentage.
+
+        Available range: 1 - 99 
+        Default: 0
+
+
+USAGE
+    To create condition under following parameters,
+
+      from: dynamo.cs.columbia.edu(128.59.16.4)/41191
+      to: disco.cs.columbia.edu(128.59.16.7)/41194
+      link speed : 50(kb/s)
+      delay : 2.004000(sec)
+      no packet errors
+
+    type,
+
+      newudpl -idynamo.cs.columbia.edu -odisco.cs.columbia.edu -s50 -d2.004
+
+
+    For,
+      verbose mode
+      from: any port of dynamo.cs.columbia.edu(128.59.16.4)
+      to: disco.cs.columbia.edu(128.59.16.7)/32768
+      with error rate
+        random packet loss: 7(1/100 per packet)
+        bit error         : 5(1/100000 per bit)
+        out of order      : 9(1/100 per packet)
+
+      newudpl -idynamo.cs.columbia.edu/* -odisco.cs.columbia.edu:0x8000 -v -L7 
+        -B5 -O9
+
+
+    To stop the emulator,
+      1) press ctr-c
+      2) type any 'q' 'quit' 'stop' 'exit' from the console
+
+
+AUTHUR
+    Akira Tsukamoto
+    at541@columbia.edu
+
+
+ACKNOWLEDGEMENTS
+    For genarating a random variable corresponding to binomial distribution , 
+    I used the bnldev() function from 
+    William H. Press, Brian P. Flannery, Saul A. Teukolsky, William T. 
+    Vetterling, 'Numerical Recipes in C' The Press Syndicate of the University 
+    of Cambridge, 1992.
+
+    This emulator was developed under supervising by,
+    Wenyu Jiang http://www.cs.columbia.edu/~wenyu/
+    Henning Schulzrinne http://www.cs.columbia.edu/~hgs/
+
+    I referred many codes in rtptools to understand the multitimer function. 
+    http://www.cs.columbia.edu/IRT/software/rtptools/
+
+    Tetsu Iwama, He is good at math and taught me the rejection method.
+    Manager, Credit Risk Trading, Derivative Products Division, The Fuji Bank 
+    Limited, Mizuho Financial Group
+
+    Kuniyoshi Murata, He corrected my many English mistakes.
+    English-Japanese Interpreter mailto:kuni@ej-interpreter.net
+    Macintosh Webcast Specialist http://www.macwebcaster.com
+
+COPYRIGHT
+    Copyright (C) 2001 by Columbia University; all rights reserved 
+
+    Permission to use, copy, modify, and distribute this software and its 
+    documentation for not-for-profit research and educational purposes and 
+    without fee is hereby granted, provided that the above copyright notice 
+    appear in all copies and that both that the copyright notice and warranty 
+    disclaimer appear in supporting documentation, and that the names of the 
+    copyright holders or any of their entities not be used in advertising or 
+    publicity pertaining to distribution of the software without specific, 
+    written prior permission. Use of this software in whole or in parts for 
+    commercial advantage and by for-profit organizations requires a license. 
+    The copyright holders disclaim all warranties with regard to this 
+    software, including all implied warranties of merchantability and fitness. 
+    In no event shall the copyright holders be liable for any special, 
+    indirect or consequential damages or any damages whatsoever resulting from 
+    loss of use, data or profits, whether in an action of contract, negligence 
+    or other tortuous action, arising out of or in connection with the use or 
+    performance of this software. 
+
+
+Last updated: 2001-12-12 by Akira Tsukamoto 
