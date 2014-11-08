@@ -1,4 +1,5 @@
 #define MSS 576
+#define HEADER_SIZE 20
 
 struct tcp_header {
 	unsigned short source_port;

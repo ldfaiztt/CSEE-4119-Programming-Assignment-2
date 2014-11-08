@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <sys/time.h>
 #include "tcp.h"
 using namespace std;
 
@@ -34,6 +35,13 @@ int main(int argc, char *argv[])
 	ostream log(logBuffer);
 	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	int ackfd = socket(AF_INET, SOCK_DGRAM, 0);
+	struct timeval timeout;
+	timeout.tv_sec = 2;
+	timeout.tv_usec = 0;
+	if (setsockopt(ackfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
+		perror("error");
+		exit(1);
+	}
 	struct sockaddr_in receiver;
 	struct sockaddr_in sender;
 	receiver.sin_family = AF_INET;
@@ -49,28 +57,63 @@ int main(int argc, char *argv[])
 		perror("error");
 		exit(1);
 	}
-	int sequence_number = 0;
+	int sequenceNumber = 0;
+	int acknowledgment_number = 0;
 	struct tcp_packet packet;
 	int n;
+	int t;
+	int segments = 0;
+	int segmentsRetransmitted = 0;
 	while (!file.eof()) {
 		bzero(&packet, sizeof(packet));
 		packet.header.source_port = sender.sin_port;
 		packet.header.destination_port = receiver.sin_port;
-		packet.header.sequence_number = sequence_number;
+		packet.header.sequence_number = sequenceNumber;
+		packet.header.acknowledgment_number = acknowledgment_number;
 		packet.header.offset_and_flags = 5 << 4;
 		file.read(packet.payload, MSS - 20);
 		n = file.gcount();
-		sequence_number += n + sizeof(packet.header);
 		if (n < MSS - 20) {
 			packet.header.offset_and_flags |= 1;
 		}
-		if (sendto(sockfd, &packet, MSS, 0, (struct sockaddr *) &receiver, sizeof(receiver)) == -1) {
-			perror("error");
-			exit(1);
+		/* Using C implementation of Internet checksum from https://tools.ietf.org/html/rfc1071 */
+		int packetSize = n + HEADER_SIZE;
+		unsigned short *ptr = (unsigned short *) &packet;
+		int sum = 0;
+		while (packetSize > 1) {
+			sum += *ptr++;
+			packetSize -= 2;
 		}
+		if (packetSize > 0)
+			sum += * (unsigned char *) ptr;
+		while (sum >> 16)
+			sum = (sum & 0xFFFF) + (sum >> 16);
+		packet.header.checksum = ~sum;
+		packetSize = n + HEADER_SIZE;
+		int newSequenceNumber = sequenceNumber + packetSize;
+		int retransmitted = -1;
+		do {
+			if (sendto(sockfd, &packet, packetSize, 0, (struct sockaddr *) &receiver, sizeof(receiver)) == -1) {
+				perror("error");
+				exit(1);
+			}
+			retransmitted++;
+			t = recvfrom(ackfd, &packet, sizeof(packet.header), 0, NULL, NULL);
+		} while (t < HEADER_SIZE || !(packet.header.offset_and_flags & (1 << 4)) || packet.header.acknowledgment_number != newSequenceNumber);
+		acknowledgment_number = packet.header.sequence_number + HEADER_SIZE;
+		sequenceNumber = newSequenceNumber;
+		segments++;
+		if (retransmitted > 0)
+			segmentsRetransmitted++;
 	}
 	file.close();
 	if (logFile.is_open())
 		logFile.close();
+	close(sockfd);
+	close(ackfd);
+	cout << "Delivery completed successfully" << endl;
+	cout << "Total bytes sent = " << sequenceNumber << endl;
+	cout << "Segments sent = " << segments << endl;
+	cout << "Segments retransmitted = " << segmentsRetransmitted << endl;
 	return 0;
 }
