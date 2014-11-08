@@ -64,6 +64,8 @@ int main(int argc, char *argv[])
 	int t;
 	int segments = 0;
 	int segmentsRetransmitted = 0;
+	struct sockaddr_in ephemeral;
+	socklen_t ephemeralSize;
 	while (!file.eof()) {
 		bzero(&packet, sizeof(packet));
 		packet.header.source_port = sender.sin_port;
@@ -92,14 +94,24 @@ int main(int argc, char *argv[])
 		packetSize = n + HEADER_SIZE;
 		int newSequenceNumber = sequenceNumber + packetSize;
 		int retransmitted = -1;
+		struct timeval start, end;
 		do {
+			log << (int) time(NULL) << ",\t" << inet_ntoa(sender.sin_addr) << ",\t" << argv[2] << ",\t" << packet.header.sequence_number << ",\t" << packet.header.acknowledgment_number << ",\tACK: " << ((packet.header.offset_and_flags & (1 << 4)) >> 4) << "\tFIN: " << (packet.header.offset_and_flags & 1) << ",\t" << timeout.tv_sec + timeout.tv_usec / 1000000.0 << endl;
+			gettimeofday(&start, NULL);
 			if (sendto(sockfd, &packet, packetSize, 0, (struct sockaddr *) &receiver, sizeof(receiver)) == -1) {
 				perror("error");
 				exit(1);
 			}
 			retransmitted++;
-			t = recvfrom(ackfd, &packet, sizeof(packet.header), 0, NULL, NULL);
+			t = recvfrom(ackfd, &packet, sizeof(packet.header), 0, (struct sockaddr *) &ephemeral, &ephemeralSize);
 		} while (t < HEADER_SIZE || !(packet.header.offset_and_flags & (1 << 4)) || packet.header.acknowledgment_number != newSequenceNumber);
+		gettimeofday(&end, NULL);
+		log << (int) time(NULL) << ",\t" << inet_ntoa(ephemeral.sin_addr) << ",\t" << inet_ntoa(sender.sin_addr) << ",\t" << packet.header.sequence_number << ",\t" << packet.header.acknowledgment_number << ",\tACK: " << ((packet.header.offset_and_flags & (1 << 4)) >> 4) << "\tFIN: " << (packet.header.offset_and_flags & 1) << ",\t" << timeout.tv_sec + timeout.tv_usec / 1000000.0 << endl;
+		double difference = (end.tv_sec * 1000000 + end.tv_usec) - (start.tv_sec * 1000000 + start.tv_usec);
+		double estimatedRTT = (timeout.tv_sec * 1000000 + timeout.tv_usec);
+		estimatedRTT = (1 - 0.125) * estimatedRTT + 0.125 * difference;
+		timeout.tv_sec = estimatedRTT / 1000000;
+		timeout.tv_usec = estimatedRTT - timeout.tv_sec * 1000000;
 		acknowledgment_number = packet.header.sequence_number + HEADER_SIZE;
 		sequenceNumber = newSequenceNumber;
 		segments++;
